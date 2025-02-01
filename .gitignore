@@ -1,0 +1,16 @@
+# Node.js
+node_modules/
+package-lock.json
+
+# Python
+__pycache__/
+venv/
+
+# Environment Variables
+.env
+backend/config/.env
+frontend/.env.local
+
+# Build Files
+.next/
+dist/

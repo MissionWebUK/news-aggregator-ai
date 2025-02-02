@@ -20,6 +20,7 @@
     "express-rate-limit": "^7.5.0",
     "mongoose": "^8.9.6",
     "node-cache": "^5.1.2",
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.1.9",
+    "sanitize-html": "^2.14.0"
   }
 }

@@ -16,7 +16,7 @@ function startPythonProcess() {
         // ✅ Ignore the harmless "Device set to use mps" message
         if (errorMsg.includes("Device set to use mps")) return;
 
-        console.error("❌ Python Process Error:", errorMsg);
+        console.error("", errorMsg);
     });
 
     process.on("exit", (code, signal) => {
@@ -53,6 +53,7 @@ pythonProcess.stdout.on("data", (data) => {
 
 // ✅ ADD LOGS HERE: Print what Node.js is sending to Python
 exports.summarizeBatch = (articles) => {
+    // console.log("📥 Summarizer Received:", JSON.stringify(articles, null, 2)); // ✅ Debugging log
     return new Promise((resolve, reject) => {
         let timeout = setTimeout(() => {
             console.error("❌ Summarization timeout");

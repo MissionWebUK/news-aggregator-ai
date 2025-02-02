@@ -58,7 +58,7 @@ export default function Home() {
               </div>
             ))
           ) : (
-            <p className="text-gray-600 text-center col-span-full">No news found or loading...</p>
+            <p className="text-gray-600 text-center col-span-full">Loading...</p>
           )}
         </div>
       </main>

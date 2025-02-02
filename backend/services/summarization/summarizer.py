@@ -4,6 +4,7 @@ import json
 import torch
 import html
 import time
+import re
 import concurrent.futures
 from transformers import pipeline
 
@@ -24,6 +25,22 @@ def clean_text(text):
     text = text.replace("…", "...")  # ✅ Convert ellipses
     return text.strip()
 
+def trim_to_sentence_boundary(text, max_chars=150):
+    """Trims text but ensures it ends at a complete sentence."""
+    if len(text) <= max_chars:
+        return text  # No need to trim
+
+    trimmed_text = text[:max_chars]
+    
+    # ✅ Search for the last complete sentence using regex
+    match = re.search(r'([.!?])\s+[A-Z]', trimmed_text[::-1])  # Look for last punctuation before a capital letter
+
+    if match:
+        cutoff_index = max_chars - match.start()
+        return text[:cutoff_index].strip()
+
+    return trimmed_text.rsplit(" ", 1)[0] + "..."  # ✅ Fallback: trim to nearest full word
+
 # ✅ Summarize text with time constraints
 def summarize_text(text, timeout=9):
     """Summarize text with a timeout constraint."""
@@ -38,7 +55,7 @@ def summarize_text(text, timeout=9):
 
     # ✅ Adjust min/max summary length dynamically
     min_length = max(15, input_length // 6)
-    max_length = min(120, max(min_length + 10, input_length // 4))  # Cap max length at 120
+    max_length = min(120, max(min_length + 20, input_length // 3))  # Increased margin
 
     if max_length >= input_length:
         max_length = input_length - 1
@@ -61,9 +78,10 @@ def summarize_text(text, timeout=9):
 
         if elapsed_time > dynamic_timeout:
             print(f"⚠️ Summarization took too long ({elapsed_time:.2f}s), returning trimmed text", file=sys.stderr)
-            return text[:150] + "..."
+            return trim_to_sentence_boundary(text[:150])  # ✅ Apply safe trimming
 
-        return clean_text(summary[0]["summary_text"])
+        cleaned_summary = clean_text(summary[0]["summary_text"])
+        return trim_to_sentence_boundary(cleaned_summary)
 
     except Exception as e:
         print(f"❌ Summarization Error: {e}", file=sys.stderr)
@@ -82,14 +100,10 @@ def process_input():
             # ✅ Debug incoming JSON format
             try:
                 articles = json.loads(line)
-                # print(f"📥 Received JSON with {len(articles)} articles", file=sys.stderr)
-
-                # if len(articles) > 0:
-                    # print(f"🔹 First Item: {articles[0]}", file=sys.stderr)
 
             except json.JSONDecodeError as e:
                 print(f"❌ JSON Decode Error: {e}", file=sys.stderr)
-                continue  # ✅ This was missing indentation before
+                continue
 
             # ✅ Extract content safely
             contents = [article.get("content", "") for article in articles if isinstance(article, dict)]
@@ -105,7 +119,6 @@ def process_input():
                     summaries.append(future.result())
 
             response = json.dumps(summaries)
-            # print(f"📤 Sending output: {response[:200]}...", file=sys.stderr)  # ✅ Trimmed for logging
             sys.stdout.write(response + "\n")
             sys.stdout.flush()
 

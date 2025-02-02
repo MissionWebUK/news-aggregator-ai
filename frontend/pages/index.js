@@ -5,11 +5,11 @@ export default function Home() {
   const [news, setNews] = useState([]); // Ensure it's an array
 
   useEffect(() => {
-    console.log("Fetching news from:", `${process.env.NEXT_PUBLIC_BACKEND_URL}/news?query=electronics`); // ✅ Debug URL
+    // console.log("Fetching news from:", `${process.env.NEXT_PUBLIC_BACKEND_URL}/news?query=electronics`); // ✅ Debug URL
 
     axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/news?query=electronics`)
       .then((res) => {
-        console.log("API Response from Backend:", res.data); // ✅ Debug API response
+        // console.log("API Response from Backend:", res.data); // ✅ Debug API response
 
         if (res.data && Array.isArray(res.data.articles)) {
           setNews(res.data.articles);
@@ -39,7 +39,7 @@ export default function Home() {
               <div key={index} className="bg-white shadow-md rounded-lg overflow-hidden transition transform hover:scale-105">
                 {/* Image */}
                 {article.urlToImage && (
-                  <img src={article.urlToImage} alt={article.title} className="w-full h-48 object-cover" />
+                  <img src={article.urlToImage || "https://media.istockphoto.com/id/1452662817/vector/no-picture-available-placeholder-thumbnail-icon-illustration-design.jpg?s=612x612&w=0&k=20&c=bGI_FngX0iexE3EBANPw9nbXkrJJA4-dcEJhCrP8qMw="} alt={article.title} className="w-full h-48 object-cover rounded-md" />
                 )}
 
                 {/* Content */}

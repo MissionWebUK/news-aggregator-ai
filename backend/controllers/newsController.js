@@ -126,11 +126,19 @@ exports.getNews = async (req, res) => {
       }
     }
 
+    const getDomainFromUrl = (url) => {
+      try {
+        return new URL(url).hostname.replace("www.", "");
+      } catch (error) {
+        return "Unknown Source";
+      }
+    };
+
     let enrichedArticles = combinedArticles.map((article, index) => ({
       title: article.title,
-      source: article.source?.name || "Unknown Source",
+      source: article.source?.name || getDomainFromUrl(article.url) || "Unknown Source",
       publishedAt: article.publishedAt,
-      urlToImage: article.urlToImage,
+      urlToImage: article.urlToImage || "https://media.istockphoto.com/id/1452662817/vector/no-picture-available-placeholder-thumbnail-icon-illustration-design.jpg?s=612x612&w=0&k=20&c=bGI_FngX0iexE3EBANPw9nbXkrJJA4-dcEJhCrP8qMw=",  // ✅ Fix for missing images
       url: article.url,
       summary: summaries[index] || "Summary unavailable",
     }));

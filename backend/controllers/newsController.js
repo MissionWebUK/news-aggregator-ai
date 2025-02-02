@@ -19,7 +19,10 @@ exports.getNews = async (req, res) => {
 
     // Return cached response if available
     if (cache.has(cacheKey)) {
+      console.log("✅ Returning cached data");
       return res.json({ articles: cache.get(cacheKey) });
+    } else {
+      console.log("⚠️ No cache found, fetching fresh news...");
     }
     
     //console.log("Fetching news for query:", query); // ✅ Debugging output
@@ -48,9 +51,6 @@ exports.getNews = async (req, res) => {
     let summaries = await summarizer.summarizeBatch(articles);
 
     //console.log("Raw summaries response:", summaries); // ✅ Debugging output
-
-    // ✅ Store in cache
-    cache.set(cacheKey, summaries);
     
     // If articles is a string, parse it into an array
     if (typeof summaries === "string") {
@@ -62,8 +62,21 @@ exports.getNews = async (req, res) => {
       }
     }
 
+    let enrichedArticles = articles.map((article, index) => ({
+      title: article.title,
+      source: article.source?.name || "Unknown Source",
+      publishedAt: article.publishedAt,
+      urlToImage: article.urlToImage,
+      url: article.url,
+      summary: summaries[index] || "Summary unavailable",
+    }));
+
+    // ✅ Store enriched articles in cache
+    cache.set(cacheKey, enrichedArticles);
+    console.log("✅ Cached new enriched articles");
+
     // console.log("Formatted Summaries:", summaries); // ✅ Log final summaries
-    res.json({ articles: summaries }); // ✅ Send properly formatted JSON
+    res.json({ articles: enrichedArticles }); // ✅ Send properly formatted JSON
   } catch (error) {
     console.error("Error fetching news:", error);
     res.status(500).json({ message: "Error fetching news", error: error.toString(), articles: [] });

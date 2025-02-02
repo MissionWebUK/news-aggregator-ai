@@ -25,18 +25,42 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-xl font-bold">Latest Consumer Electronics News</h1>
-      {news.length > 0 ? (
-        news.map((article, index) => (
-          <div key={index} className="p-2 border-b">
-            <p className="italic">{article}</p> {/* ✅ Display summary correctly */}
-            <a href="#" target="_blank" className="text-blue-500">Read more</a>
-          </div>
-        ))
-      ) : (
-        <p>No news found or loading...</p>
-      )}
+    <div className="bg-gray-100 min-h-screen">
+    {/* Page Header */}
+      <header className="bg-blue-800 text-white text-center py-6">
+        <h1 className="text-3xl font-bold">Latest Consumer Electronics News</h1>
+      </header>
+
+      {/* News Container */}
+      <main className="container mx-auto px-4 py-6 max-w-5xl">
+        {news.length > 0 ? (
+          news.map((article, index) => (
+            <div key={index} className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
+              {article.urlToImage && (
+                <img src={article.urlToImage} alt={article.title} className="w-full h-56 object-cover" />
+              )}
+  
+              <div className="p-6">
+                <h2 className="text-xl font-semibold text-gray-900">{article.title}</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  {article.source} • {new Date(article.publishedAt).toLocaleDateString()}
+                </p>
+                <p className="mt-3 text-gray-700">{article.summary}</p>
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block text-blue-600 font-medium mt-3 hover:underline"
+                >
+                  Read More →
+                </a>
+              </div>
+            </div>
+          ))
+        ) : (
+          <p>No news found or loading...</p>
+        )}
+      </main>
     </div>
   );
 }

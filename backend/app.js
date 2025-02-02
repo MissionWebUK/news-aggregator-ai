@@ -23,10 +23,8 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/newsdb", {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => console.log("MongoDB Connected"))
+mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/newsdb")
+  .then(() => console.log("MongoDB Connected"))
   .catch(err => console.error("MongoDB Connection Error:", err));
 
 const newsRoutes = require("./routes/newsRoutes");

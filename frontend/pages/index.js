@@ -26,40 +26,41 @@ export default function Home() {
 
   return (
     <div className="bg-gray-100 min-h-screen">
-    {/* Page Header */}
-      <header className="bg-blue-800 text-white text-center py-6">
+      {/* Header */}
+      <header className="bg-blue-900 text-white text-center py-6 shadow-lg">
         <h1 className="text-3xl font-bold">Latest Consumer Electronics News</h1>
       </header>
 
-      {/* News Container */}
-      <main className="container mx-auto px-4 py-6 max-w-5xl">
-        {news.length > 0 ? (
-          news.map((article, index) => (
-            <div key={index} className="bg-white shadow-lg rounded-lg overflow-hidden mb-6">
-              {article.urlToImage && (
-                <img src={article.urlToImage} alt={article.title} className="w-full h-56 object-cover" />
-              )}
-  
-              <div className="p-6">
-                <h2 className="text-xl font-semibold text-gray-900">{article.title}</h2>
-                <p className="text-gray-500 text-sm mt-1">
-                  {article.source} • {new Date(article.publishedAt).toLocaleDateString()}
-                </p>
-                <p className="mt-3 text-gray-700">{article.summary}</p>
-                <a
-                  href={article.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-blue-600 font-medium mt-3 hover:underline"
-                >
-                  Read More →
-                </a>
+      {/* News Grid */}
+      <main className="container mx-auto px-4 py-6 max-w-6xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {news.length > 0 ? (
+            news.map((article, index) => (
+              <div key={index} className="bg-white shadow-md rounded-lg overflow-hidden transition transform hover:scale-105">
+                {/* Image */}
+                {article.urlToImage && (
+                  <img src={article.urlToImage} alt={article.title} className="w-full h-48 object-cover" />
+                )}
+
+                {/* Content */}
+                <div className="p-4">
+                  <h2 className="text-lg font-semibold text-gray-900">{article.title}</h2>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {article.source} • {new Date(article.publishedAt).toLocaleDateString()}
+                  </p>
+                  <p className="mt-3 text-gray-700">{article.summary}</p>
+
+                  {/* Read More */}
+                  <a href={article.url} target="_blank" rel="noopener noreferrer" className="inline-block mt-3 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg shadow hover:bg-blue-700 transition">
+                    Read More →
+                  </a>
+                </div>
               </div>
-            </div>
-          ))
-        ) : (
-          <p>No news found or loading...</p>
-        )}
+            ))
+          ) : (
+            <p className="text-gray-600 text-center col-span-full">No news found or loading...</p>
+          )}
+        </div>
       </main>
     </div>
   );

@@ -14,5 +14,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [require("flowbite/plugin")], // ✅ Enable Flowbite Plugin
 } satisfies Config;

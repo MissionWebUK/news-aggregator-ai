@@ -1,156 +1,201 @@
-require("dotenv").config({ path: "./config/.env" });
-const axios = require("axios");
-const axiosRetry = require("axios-retry").default;
-const NodeCache = require("node-cache");
-const path = require("path");
-const sanitizeHtml = require("sanitize-html");
-const summarizer = require("../services/summarization/summarizer"); // Import summarization module
-const NEWS_API_KEY = process.env.NEWS_API_KEY;
+// File: newsController.js
 
-// ✅ Initialize cache (TTL = 10 minutes)
-const cache = new NodeCache({ stdTTL: 600 });
+// ✅ Import required environment variables
+import dotenv from "dotenv";
+dotenv.config({ path: "./config/.env" });
 
-// Retry request up to 3 times if it fails
-axiosRetry(axios, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
+// ✅ Import required modules
+import axios from "axios";
+import axiosRetry from "axios-retry";
+import NodeCache from "node-cache";
+import path from "path"; // Potentially unused now, but left here in case you need it
+import sanitizeHtml from "sanitize-html"; // Potentially unused now, but left here in case you sanitize in the future
+import { MongoClient } from "mongodb";
+import cron from "node-cron";
+import fetch from "node-fetch";
+import { spawn } from "child_process";
+import { summarizeBatch } from "../services/summarization/summarizer.js";
 
-// ✅ Blocked sources list (you can add more here)
+// ✅ Environment variables
+const NEWS_API_URL = process.env.NEWS_API_URL;   // Used by cron job
+const MONGO_URI = process.env.MONGO_URI;
+const DB_NAME = process.env.DB_NAME || "userdb";
+const COLLECTION_NAME = process.env.COLLECTION_NAME || "NewsArticle";
+
+// Blocked sources to filter out - Do we need a separate table for this? 
 const BLOCKED_SOURCES = ["dealcatcher.com"];
 
-// ✅ Fetch news articles from NewsAPI and summarize them
-exports.getNews = async (req, res) => {
-  try {
-    const { query } = req.query || "technology";
-    const cacheKey = `news_${query}`;
+// ✅ Initialize MongoDB Client
+const client = new MongoClient(MONGO_URI, {});
+await client.connect();
+const db = client.db(DB_NAME);
+const collection = db.collection(COLLECTION_NAME);
 
-    // Return cached response if available
-    if (cache.has(cacheKey)) {
-      console.log("✅ Returning cached data");
-      return res.json({ articles: cache.get(cacheKey) });
-    } else {
-      console.log("⚠️ No cache found, fetching fresh news...");
-    }
-    
-    //console.log("Fetching news for query:", query); // ✅ Debugging output
+// ✅ Initialize cache (TTL = 10 minutes)
 
-    // Fetch news articles from NewsAPI
-    const response = await axios.get("https://newsapi.org/v2/everything", {
-      params: { q: query, 
-                apiKey: NEWS_API_KEY,
-                pageSize: 20,  // ✅ Limit to 20 most recent articles
-                sortBy: "publishedAt", // ✅ Ensure most recent articles
-                language: "en" } // ✅ Ensure English articles
-    });
+// The cache is used to store the results of the getNews function for a certain period of time to avoid making the same request multiple times.
+const cache = new NodeCache({ stdTTL: 600 });
 
-    //console.log("Raw API Response from NewsAPI:", response.data); // ✅ Debugging output
+// Add retry logic to Axios
+axiosRetry(axios, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
 
-    if (!response.data.articles || !Array.isArray(response.data.articles)) {
-      console.log("No articles found or incorrect format.");
-      return res.status(404).json({ message: "No articles found", articles: [] });
-    }
+/**
+ * Checks if a given article URL already exists in MongoDB.
+ */
+async function articleExists(url) {
+  return !!(await collection.findOne({ url }, { projection: { _id: 1 } }));
+}
 
-    let articles = response.data.articles;
+/* -----------------------------------------------------------------------------
+    1. CRON JOBs to fetch NewsAPI & RSS articles in the background
+    - Summarizes them
+    - Inserts new articles into MongoDB
+   ----------------------------------------------------------------------------- */
 
-    // ✅ Filter out unwanted sources
-    articles = articles.filter(article => {
-      return !BLOCKED_SOURCES.includes(article.source?.name?.toLowerCase());
-    });
+  //Should we move the CRON job in app.js here?
 
-    let newsApiArticles = articles;
+// Fetch NewsAPI articles
+async function fetchNewsAPI() {
+  console.log("🔄 [CRON] Fetching latest news from API...");
 
-    const { spawn } = require("child_process");
-
-    const getRSSArticles = () => {
-      return new Promise((resolve, reject) => {
-        console.log("🚀 Fetching RSS articles from Python script...");
-        const scriptPath = path.join(__dirname, "../services/rss_fetcher.py");
-        const pythonProcess = spawn("python3", [scriptPath]);
-        let data = "";
-        let errorMsg = "";
-        pythonProcess.stdout.on("data", (chunk) => (data += chunk));
-        pythonProcess.stderr.on("data", (chunk) => (errorMsg += chunk));
-
-        pythonProcess.on("close", (code) => {
-          if (code !== 0) {
-            console.error(`❌ Python script exited with code ${code}`);
-            console.error(`🐍 Python Error: ${errorMsg}`);
-            return reject(new Error(`RSS fetcher exited with code ${code}`));
-          } try {
-            const parsedData = JSON.parse(data);
-            // console.log("✅ RSS Articles Fetched:", parsedData);
-            resolve(parsedData);
-          } catch (error) {
-            console.error("❌ JSON Parsing Error:", error);
-            reject(error);
-          }
-        });
-      });
-    };
-
-    const rssArticles = await getRSSArticles();
-
-    // ✅ Combine NewsAPI + RSS articles
-    let combinedArticles = [...newsApiArticles, ...rssArticles];
-    //console.log("Articles before summarization:", articles); // ✅ Debugging output
-    
-    // Generate summaries for all articles
-    // ✅ Extract content to summarize
-    let contentToSummarize = combinedArticles
-      .map(article => {
-        let rawText = article.summary || article.description || "No content available.";
-        return sanitizeHtml(rawText, { allowedTags: [], allowedAttributes: {} }).trim(); // ✅ Remove HTML
-      })
-      .filter(text => typeof text === "string" && text.length > 5); // ✅ Remove empty/invalid entries
-
-    // ✅ Debug: Print extracted text before sending to summarizer
-    // console.log("📝 Texts Sent to Summarizer:", JSON.stringify(contentToSummarize, null, 2));
-
-    // ✅ Ensure all items have "content"
-    const formattedArticles = contentToSummarize.map(article => ({
-      content: article,
-    }));
-
-    const summaries = await Promise.race([
-      summarizer.summarizeBatch(formattedArticles),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Summarization Timeout")), 40000)) // ✅ 15 sec timeout
-  ]);
-
-    //console.log("Raw summaries response:", summaries); // ✅ Debugging output
-    
-    // If articles is a string, parse it into an array
-    if (typeof summaries === "string") {
-      try {
-        summaries = JSON.parse(summaries);
-      } catch (error) {
-        console.error("Error parsing summaries JSON:", error);
-        return res.status(500).json({ message: "Error parsing summaries", error: error.toString(), articles: [] });
-      }
-    }
-
-    const getDomainFromUrl = (url) => {
-      try {
-        return new URL(url).hostname.replace("www.", "");
-      } catch (error) {
-        return "Unknown Source";
-      }
-    };
-
-    let enrichedArticles = combinedArticles.map((article, index) => ({
-      title: article.title,
-      source: article.source?.name || getDomainFromUrl(article.url) || "Unknown Source",
-      publishedAt: article.publishedAt,
-      urlToImage: article.urlToImage || "https://media.istockphoto.com/id/1452662817/vector/no-picture-available-placeholder-thumbnail-icon-illustration-design.jpg?s=612x612&w=0&k=20&c=bGI_FngX0iexE3EBANPw9nbXkrJJA4-dcEJhCrP8qMw=",  // ✅ Fix for missing images
-      url: article.url,
-      summary: summaries[index] || "Summary unavailable",
-    }));
-
-    // ✅ Store enriched articles in cache
-    cache.set(cacheKey, enrichedArticles);
-    console.log("✅ Cached new enriched articles");
-
-    // console.log("Formatted Summaries:", summaries); // ✅ Log final summaries
-    res.json({ articles: enrichedArticles }); // ✅ Send properly formatted JSON
-  } catch (error) {
-    console.error("Error fetching news:", error);
-    res.status(500).json({ message: "Error fetching news", error: error.toString(), articles: [] });
+  // If NEWS_API_URL is missing, abort
+  if (!NEWS_API_URL || NEWS_API_URL.trim() === "") {
+    console.error("❌ ERROR: Missing NEWS_API_URL in environment variables!");
+    return;
   }
-};
+
+  try {
+    // 1. Fetch from NewsAPI
+    const response = await fetch(NEWS_API_URL.trim());
+    if (!response.ok) {
+      throw new Error(`NewsAPI responded with HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // 2. Validate articles
+    if (!data.articles || !Array.isArray(data.articles)) {
+      console.warn("⚠️ No articles array found or format error in API response");
+      return;
+    }
+
+    // Filter out blocked sources
+    const rawArticles = data.articles.filter((article) => {
+      const sourceName = article.source?.name?.toLowerCase() ?? "";
+      return !BLOCKED_SOURCES.includes(sourceName);
+    });
+
+    if (!rawArticles.length) {
+      console.log("⚠️ No articles after filtering blocked sources.");
+      return;
+    }
+
+    // 3. Summarize each article
+    const summaries = await summarizeBatch(
+      rawArticles.map((article) => article.title + " " + (article.description || ""))
+    );
+
+    rawArticles.forEach((article, i) => {
+      article.summary = summaries[i] || article.description || "No summary available.";
+    });
+
+    // 4. Check duplicates and build a list of new articles
+    const newArticles = [];
+    for (const article of rawArticles) {
+      const exists = await articleExists(article.url);
+      if (!exists) {
+        newArticles.push({
+          title: article.title ?? "No Title",
+          url: article.url,
+          source: article.source?.name ?? "Unknown",
+          publishedAt: article.publishedAt ? new Date(article.publishedAt) : new Date(),
+          summary: article.summary || article.description || "No summary available.",
+          urlToImage: article.urlToImage || null,
+        });
+      }
+    }
+
+    // 5. Insert only new articles
+    if (newArticles.length > 0) {
+      await collection.insertMany(newArticles, { ordered: false });
+      console.log(`✅ Inserted ${newArticles.length} new articles from NewsAPI into MongoDB`);
+    } else {
+      console.log("⚠️ No new articles to insert from NewsAPI.");
+    }
+  } catch (error) {
+    console.error("❌ Error fetching or inserting NewsAPI articles:", error);
+  }
+}
+
+// Fetch RSS articles
+async function fetchNewsRSS() {
+  console.log("🔄 Running RSS Fetcher...");
+
+  // Spawn a child process to run the Python script
+  const pythonProcess = spawn("python3", ["services/rss_fetcher.py"]);
+
+  // Log output from the Python script
+  //pythonProcess.stdout.on("data", (data) => {
+    //console.log(`✅ RSS Fetch Output:\n${data}`);
+  //});
+
+  // Log errors from the Python script
+  pythonProcess.stderr.on("data", (data) => {
+    console.error(`❌ RSS Fetch Error:\n${data}`);
+  });
+
+  // Log when the Python script exits
+  pythonProcess.on("close", (code) => {
+    if (code !== 0) {
+      console.error(`❌ RSS Fetch process exited with code ${code}`);
+      return;
+    }
+    console.log(`RSS Fetch process completed successfully`);
+  });
+}
+
+// ✅ Schedule the cron job to fetch NewsAPI articles every 30 minutes
+cron.schedule("*/30 * * * *", fetchNewsAPI);
+cron.schedule("*/30 * * * *", fetchNewsRSS)
+
+/* -----------------------------------------------------------------------------
+    2. getDbNews()
+    - Fetch the 50 most recent articles from the DB
+    - We can also apply filtering or summarizing if needed
+ ----------------------------------------------------------------------------- */
+export async function getDbNews() {
+  try {
+    // Sort by publishedAt descending, limit 50
+    const articles = await collection
+      .find({})
+      .sort({ publishedAt: -1 })
+      .limit(50)
+      .toArray();
+    return articles;
+  } catch (error) {
+    console.error("❌ Error in getDbNews:", error);
+    throw error; // Let the caller handle the error
+  }
+}
+
+/* -----------------------------------------------------------------------------
+    3. getRankedNews()
+    - Returns articles with a 'relevance' field, sorted descending
+ ----------------------------------------------------------------------------- */
+export async function getRankedNews(req, res) {
+  try {
+    const rankedArticles = await collection
+      .find({ relevance: { $exists: true } })
+      .sort({ relevance: -1 })
+      .limit(50)
+      .toArray();
+
+    res.json({ articles: rankedArticles });
+  } catch (error) {
+    console.error("❌ Error fetching ranked news:", error);
+    res.status(500).json({
+      message: "Error fetching ranked news",
+      error: error.toString(),
+    });
+  }
+}

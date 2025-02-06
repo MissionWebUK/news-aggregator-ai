@@ -1,72 +1,89 @@
-const { spawn } = require("child_process");
+import { spawn } from "child_process";
 
+// Start the Python process
 function startPythonProcess() {
-    console.log("🚀 Starting Python summarization process...");
-    
-    const process = spawn("python3", ["services/summarization/summarizer.py"], {
-        stdio: ["pipe", "pipe", "pipe"],
-    });
+  console.log("🚀 Starting Python summarization process...");
 
-    process.stderr.on("data", (error) => {
-        const errorMsg = error.toString().trim();
-    
-        // ✅ Ignore the harmless "Device set to use cpu" message
-        if (errorMsg.includes("Device set to use cpu")) return;
-    
-        // ✅ Ignore the harmless "Device set to use mps" message
-        if (errorMsg.includes("Device set to use mps")) return;
+  // Run the Python script with Python 3
+  const process = spawn("python3", ["services/summarization/summarizer.py"], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 
-        console.error("", errorMsg);
-    });
+  // Filter out harmless device logs
+  process.stderr.on("data", (error) => {
+    const errorMsg = error.toString().trim();
+    if (
+      errorMsg.includes("Device set to use cpu") ||
+      errorMsg.includes("Device set to use mps") ||
+      errorMsg.includes("No GPU found") // your Python script might log this
+    ) {
+      return;
+    }
+    console.error("❌ Summarization Error:", errorMsg);
+  });
 
-    process.on("exit", (code, signal) => {
-        console.error(`❌ Python process exited with code ${code} and signal ${signal}`);
-    });
+  process.on("exit", (code, signal) => {
+    console.error(`❌ Python process exited with code ${code} and signal ${signal}`);
+    // Optionally respawn (uncomment if desired):
+    // pythonProcess = startPythonProcess();
+  });
 
-    return process;
+  return process;
 }
 
 let pythonProcess = startPythonProcess();
 let pendingRequests = [];
 let outputBuffer = "";
 
+// If you want to handle multiple JSON lines per data chunk:
 pythonProcess.stdout.on("data", (data) => {
-    outputBuffer += data.toString();
+  outputBuffer += data.toString();
+  // Split on newline to handle multiple responses or partial lines
+  const lines = outputBuffer.split("\n");
+  // Keep the last partial line in outputBuffer
+  outputBuffer = lines.pop();
 
-    if (outputBuffer.trim().endsWith("]")) { 
-        try {
-            const parsedData = JSON.parse(outputBuffer);
-            // console.log("✅ Parsed Summarization Response:", parsedData); // ✅ Log response
-            
-            if (pendingRequests.length > 0) {
-                let request = pendingRequests.shift();
-                clearTimeout(request.timeout);
-                request.resolve(parsedData);
-            }
-            outputBuffer = ""; 
-        } catch (e) {
-            console.error("❌ Error parsing summarization response:", e);
-            outputBuffer = "";
-        }
+  // Process each completed line
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue; // skip empty lines
+
+    try {
+      const parsedData = JSON.parse(trimmedLine);
+      // Resolve the oldest pending request
+      if (pendingRequests.length > 0) {
+        let request = pendingRequests.shift();
+        clearTimeout(request.timeout);
+        request.resolve(parsedData);
+      } else {
+        console.error("⚠️ No pendingRequests to match this response:", parsedData);
+      }
+    } catch (e) {
+      console.error("❌ Error parsing summarization response:", e);
     }
+  }
 });
 
-// ✅ ADD LOGS HERE: Print what Node.js is sending to Python
-exports.summarizeBatch = (articles) => {
-    // console.log("📥 Summarizer Received:", JSON.stringify(articles, null, 2)); // ✅ Debugging log
-    return new Promise((resolve, reject) => {
-        let timeout = setTimeout(() => {
-            console.error("❌ Summarization timeout");
-            reject("Summarization timeout.");
-            pendingRequests = pendingRequests.filter((r) => r.resolve !== resolve);
-        }, 20000); 
+// Export a function to summarize a batch of articles
+export function summarizeBatch(articles) {
+  return new Promise((resolve, reject) => {
+    // 20-second timeout
+    const timeout = setTimeout(() => {
+      console.error("❌ Summarization timeout");
+      reject("Summarization timeout.");
+      // Remove from pendingRequests if it's still there
+      pendingRequests = pendingRequests.filter((r) => r.resolve !== resolve);
+    }, 20000);
 
-        pendingRequests.push({ resolve, reject, timeout });
+    // Add our request to the queue
+    pendingRequests.push({ resolve, reject, timeout });
 
-        //console.log("📤 Sending request to Python:", JSON.stringify(articles)); // ✅ Log request
-
-        pythonProcess.stdin.write(JSON.stringify(articles) + "\n", "utf-8", (err) => {
-            if (err) console.error("❌ Error writing to Python process:", err);
-        });
+    // Write JSON array of articles to Python's stdin (each line is a separate request)
+    // If your Python script uses line-based reading, sending them on separate lines is good
+    pythonProcess.stdin.write(JSON.stringify(articles) + "\n", "utf-8", (err) => {
+      if (err) {
+        console.error("❌ Error writing to Python process:", err);
+      }
     });
-};
+  });
+}

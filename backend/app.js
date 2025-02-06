@@ -1,47 +1,123 @@
-require("dotenv").config({ path: "./config/.env" });
-const express = require("express");
-const cors = require("cors");
-const dotenv = require("dotenv");
-const mongoose = require("mongoose");
-const compression = require("compression");
-const rateLimit = require("express-rate-limit");
+// File: backend/app.js
 
-dotenv.config();
+// -------------------- IMPORTS -------------------- //
+
+import dotenv from "dotenv";
+import express from "express";
+import cors from "cors";
+import mongoose from "mongoose";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+
+// Load environment variables
+dotenv.config({ path: "./config/.env" });
+
+console.log("✅ Environment variables loaded");
+
+// Create the express app
+
 const app = express();
 
-// Middleware
-app.use(cors({ origin: process.env.FRONTEND_URL || "http://localhost:3000" }));
+// -------------------- MIDDLEWARE -------------------- //
+
+// Not Needed at the moment. If the front end sits on a different 
+// server to the backend, or there are multiple front ends, this will be necessary
+
+// Optional: If you need multiple origins, specify them in .env like:
+// CORS_ORIGINS=https://mydomain.com,https://anotherdomain.com
+// Otherwise, it falls back to FRONTEND_URL or localhost:3000
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",")
+  : [process.env.FRONTEND_URL || "http://localhost:3000"];
+
+// Configure CORS
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
+    credentials: true,
+  })
+);
+
+// Body parser
 app.use(express.json());
 app.use(compression());
+app.use(helmet());
 
 // Rate Limiting
 const limiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 min
   max: 100,
-  message: "Too many requests, try again later."
+  message: "Too many requests, try again later.",
 });
 app.use(limiter);
 
-// MongoDB Connection
-mongoose.connect(process.env.MONGO_URI || "mongodb://localhost:27017/newsdb")
-  .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.error("MongoDB Connection Error:", err));
+// -------------------- DATABASE -------------------- //
+mongoose
+  .connect(process.env.MONGO_URI || "mongodb://localhost:27017/userdb?replicaSet=rs0", {
+  })
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
-const newsRoutes = require("./routes/newsRoutes");
-app.use("/", newsRoutes);
+// Log disconnects
+mongoose.connection.on("disconnected", () => {
+  console.log("MongoDB disconnected");
+});
 
-// Error Handling Middleware
+// -------------------- ROUTES -------------------- //
+
+// All api calls via /api will be processed by the newsRoutes.js file
+
+import { newsRoutes } from "./routes/newsRoutes.js";
+app.use("/api", newsRoutes);
+
+// -------------------- ERROR HANDLING -------------------- //
 app.use((err, req, res, next) => {
-  console.error("Server Error:", err);
-  res.status(500).json({ message: "Internal Server Error", error: err.toString() });
+  console.error("❌ Server Error:", err);
+
+  // Hide sensitive error info unless in development
+  const response = {
+    message: "Internal Server Error",
+  };
+  if (process.env.NODE_ENV === "development") {
+    response.error = err.message; // or stack if you prefer
+  }
+
+  res.status(500).json(response);
 });
 
-// Graceful shutdown
-process.on("SIGINT", async () => {
-  await mongoose.connection.close();
-  console.log("MongoDB disconnected, shutting down...");
-  process.exit(0);
-});
+// -------------------- START SERVER -------------------- //
 
 const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const server = app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
+
+// -------------------- GRACEFUL SHUTDOWN -------------------- //
+const handleShutdown = async (signal) => {
+  console.log(`\n${signal} received: closing server gracefully...`);
+  await mongoose.connection.close();
+  server.close(() => {
+    console.log("HTTP server closed.");
+    process.exit(0);
+  });
+};
+
+process.on("SIGINT", () => handleShutdown("SIGINT"));
+process.on("SIGTERM", () => handleShutdown("SIGTERM"));
+
+process.on("SIGINT", () => {
+  console.log("Shutting down Node...");
+  if (pythonProcess) {
+    pythonProcess.kill("SIGINT");
+  }
+  process.exit(0);
+});

@@ -9,6 +9,10 @@ venv/
 # Environment Variables
 .env
 backend/config/.env
+backend/config/.env.local
+backend/.env
+backend/.env.local
+frontend/.env
 frontend/.env.local
 
 # Build Files

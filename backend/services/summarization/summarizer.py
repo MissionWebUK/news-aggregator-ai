@@ -117,7 +117,6 @@ def summarize_text(text):
 
     elapsed_time = time.time() - start_time
     # Post-check: If it took too long, fallback to safe truncation
-    # (Note: This doesn't forcibly stop the model, it just checks after the fact)
     if elapsed_time > 9:
         print(f"⚠️ Summarization took too long ({elapsed_time:.2f}s), returning trimmed snippet", file=sys.stderr)
         return trim_to_sentence_boundary(text[:150])
@@ -134,8 +133,8 @@ def process_input():
     print("✅ Python Summarization Process Started", file=sys.stderr)
     sys.stdout.flush()
 
-    while True:
-        try:
+    try:
+        while True:
             line = sys.stdin.readline().strip()
             if not line:
                 print("⚠️ Empty request received!", file=sys.stderr)
@@ -156,7 +155,6 @@ def process_input():
                 continue
 
             # Concurrency: use max_workers=2
-            # Each text is processed individually (this is simpler than batch summarization).
             summaries = []
             with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
                 future_to_text = {
@@ -169,12 +167,9 @@ def process_input():
             response = json.dumps(summaries)
             sys.stdout.write(response + "\n")
             sys.stdout.flush()
-
-        except Exception as e:
-            # Log generic error without exposing sensitive text
-            print(f"❌ Unexpected Error: {e}", file=sys.stderr)
-            sys.stdout.write(json.dumps({"error": "Unexpected error occurred"}) + "\n")
-            sys.stdout.flush()
+    except KeyboardInterrupt:
+        print("Python summarizer: KeyboardInterrupt received, shutting down gracefully.", file=sys.stderr)
+        sys.exit(0)
 
 if __name__ == "__main__":
     process_input()

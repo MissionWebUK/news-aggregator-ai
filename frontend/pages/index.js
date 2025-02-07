@@ -1,13 +1,11 @@
-// Note: This is the main page component that fetches news data from the backend API.
-
-// Import React and Axios
 import { useState, useEffect } from "react";
 import axios from "axios";
-// Next.js Image (optional optimization)
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 
-// Home Component
 export default function Home() {
+  const { data: session } = useSession();
+
   const [news, setNews] = useState([]);
   const [aiRankingEnabled, setAiRankingEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -19,29 +17,18 @@ export default function Home() {
       setError("");
 
       try {
-        // 1. Handle environment variable safely
-        const rawBackendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-        if (!rawBackendUrl) {
-          setError("Missing or invalid BACKEND_URL environment variable.");
-          setLoading(false);
-          return;
-        }
-        const backendUrl = rawBackendUrl.replace(/\/$/, "");
+        // Determine the endpoint to use:
+        // If AI ranking is enabled and there is a valid session, use "/api/news-rank"
+        // Otherwise, use the public endpoint "/api/news"
+        const endpoint = aiRankingEnabled && session ? "/api/news-rank" : "/api/news";
 
-        // 2. Choose endpoint
-        // If AI ranking is enabled, use the "news-rank" endpoint
-        const endpoint = aiRankingEnabled ? "api/news-rank" : "api/news";
-        // Construct API URL
-        const apiUrl = `${backendUrl}/${endpoint}`;
+        // Fetch data from the API using a relative path and including credentials (cookies)
+        const res = await axios.get(endpoint, { withCredentials: true });
 
-        // 3. Fetch data
-        const res = await axios.get(apiUrl);
-        // Check if response is valid
+        // Check if response is valid and contains an articles array
         if (res.data && Array.isArray(res.data.articles)) {
-          // Update state with news data
           setNews(res.data.articles);
         } else {
-          // Log error and update state
           console.error("❌ Unexpected API response format:", res.data);
           setNews([]);
           setError("Unexpected API response format.");
@@ -61,9 +48,8 @@ export default function Home() {
     };
 
     fetchNews();
-  }, [aiRankingEnabled]);
+  }, [aiRankingEnabled, session]);
 
-  // 4. Toggle Label: "AI Ranking" -> false = disabled
   const toggleLabel = aiRankingEnabled ? "AI Ranking: ON" : "AI Ranking: OFF";
 
   return (
@@ -105,21 +91,20 @@ export default function Home() {
                   key={index}
                   className="bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden transition transform hover:scale-105"
                 >
-                  {/* Image (Next.js optimization - optional) */}
+                  {/* Article Image */}
                   {article.urlToImage ? (
                     <div className="relative w-full h-48">
                       <Image
                         src={article.urlToImage}
                         alt={article.title}
-                        layout="fill"
-                        objectFit="cover"
-                        // Possibly use `unoptimized` if domain is not in next.config.js
+                        fill
+                        style={{ objectFit: "cover" }}
                         unoptimized
                       />
                     </div>
                   ) : null}
 
-                  {/* Content */}
+                  {/* Article Content */}
                   <div className="p-4">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
                       {article.title}

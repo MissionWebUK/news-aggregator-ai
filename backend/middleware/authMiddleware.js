@@ -1,4 +1,3 @@
-
 // Middleware to ensure that the user is authenticated
 // before accessing protected routes
 

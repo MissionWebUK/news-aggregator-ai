@@ -12,26 +12,18 @@ import helmet from "helmet";
 
 // Load environment variables
 dotenv.config({ path: "./config/.env" });
-
 console.log("✅ Environment variables loaded");
 
 // Create the express app
-
 const app = express();
 
 // -------------------- MIDDLEWARE -------------------- //
 
-// Not Needed at the moment. If the front end sits on a different 
-// server to the backend, or there are multiple front ends, this will be necessary
-
-// Optional: If you need multiple origins, specify them in .env like:
-// CORS_ORIGINS=https://mydomain.com,https://anotherdomain.com
-// Otherwise, it falls back to FRONTEND_URL or localhost:3000
+// Configure CORS
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",")
   : [process.env.FRONTEND_URL || "http://localhost:3000"];
 
-// Configure CORS
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -47,23 +39,23 @@ app.use(
   })
 );
 
-// Body parser
+// Body parser, compression, and helmet
 app.use(express.json());
 app.use(compression());
 app.use(helmet());
 
 // Rate Limiting
 const limiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 min
+  windowMs: 10 * 60 * 1000, // 10 minutes
   max: 100,
   message: "Too many requests, try again later.",
 });
 app.use(limiter);
 
 // -------------------- DATABASE -------------------- //
+
 mongoose
-  .connect(process.env.MONGO_URI || "mongodb://localhost:27017/userdb?replicaSet=rs0", {
-  })
+  .connect(process.env.MONGO_URI || "mongodb://localhost:27017/userdb?replicaSet=rs0", {})
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ MongoDB Connection Error:", err));
 
@@ -74,12 +66,16 @@ mongoose.connection.on("disconnected", () => {
 
 // -------------------- ROUTES -------------------- //
 
-// All api calls via /api will be processed by the newsRoutes.js file
-
+// News routes
 import { newsRoutes } from "./routes/newsRoutes.js";
 app.use("/api", newsRoutes);
 
+// Preferences routes
+//import { preferencesRoutes } from "./routes/preferencesRoutes.js";
+//app.use("/api/preferences", preferencesRoutes);
+
 // -------------------- ERROR HANDLING -------------------- //
+
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err);
 
@@ -88,9 +84,8 @@ app.use((err, req, res, next) => {
     message: "Internal Server Error",
   };
   if (process.env.NODE_ENV === "development") {
-    response.error = err.message; // or stack if you prefer
+    response.error = err.message;
   }
-
   res.status(500).json(response);
 });
 

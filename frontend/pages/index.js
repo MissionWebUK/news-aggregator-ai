@@ -190,14 +190,16 @@ function Carousel({ title, articles, hideImage = false }) {
 }
 
 // NewsCard Component: Displays a single news article as a card.
-// All cards use a fixed width (w-64).
 function NewsCard({ article, hideImage = false }) {
+  // Define a default placeholder image URL (make sure this image is in your public folder)
+  const defaultImage = "/img/No_Image_Available.jpg";
+
   return (
     <div className="w-64 bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden transition transform hover:scale-105 flex-shrink-0">
-      {!hideImage && article.urlToImage && (
+      {!hideImage && (
         <div className="relative w-full h-40">
           <Image
-            src={article.urlToImage}
+            src={article.urlToImage || defaultImage}
             alt={article.title}
             fill
             style={{ objectFit: "cover" }}

@@ -60,6 +60,8 @@ def fetch_rss_articles(limit=20):
         """ For each article in the feed, extract relevant fields and store in MongoDB """
         for entry in feed.entries[:limit]:
 
+            print({entry}, file=sys.stderr)
+
             """ Check if article already exists in the database """
             article_url = entry.get("link", "")
             if article_exists(article_url):

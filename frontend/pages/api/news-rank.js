@@ -27,7 +27,7 @@ async function isRateLimited(email) {
   }
   
   // If usage exceeds 10 in 5 minutes, block
-  return usage > 10;
+  return usage > 100;
 }
 
 // ---------------------------------------------------------------------
@@ -171,7 +171,7 @@ export default async function handler(req, res) {
       cacheKey,
       JSON.stringify({ articles: rankedArticles }),
       "EX",
-      600
+      60
     );
 
     return res.status(200).json({ articles: rankedArticles });

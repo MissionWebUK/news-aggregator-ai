@@ -1,4 +1,4 @@
-// File: newsController.js
+// File: backend/controllers/newsController.js
 
 // ✅ Import required environment variables
 import dotenv from "dotenv";
@@ -32,7 +32,6 @@ const db = client.db(DB_NAME);
 const collection = db.collection(COLLECTION_NAME);
 
 // ✅ Initialize cache (TTL = 10 minutes)
-
 // The cache is used to store the results of the getNews function for a certain period of time to avoid making the same request multiple times.
 const cache = new NodeCache({ stdTTL: 600 });
 
@@ -51,8 +50,6 @@ async function articleExists(url) {
     - Summarizes them
     - Inserts new articles into MongoDB
    ----------------------------------------------------------------------------- */
-
-  //Should we move the CRON job in app.js here?
 
 // Fetch NewsAPI articles
 async function fetchNewsAPI() {
@@ -134,11 +131,6 @@ async function fetchNewsRSS() {
   // Spawn a child process to run the Python script
   const pythonProcess = spawn("python3", ["services/rss_fetcher.py"]);
 
-  // Log output from the Python script
-  //pythonProcess.stdout.on("data", (data) => {
-    //console.log(`✅ RSS Fetch Output:\n${data}`);
-  //});
-
   // Log errors from the Python script
   pythonProcess.stderr.on("data", (data) => {
     console.error(`❌ RSS Fetch Error:\n${data}`);
@@ -156,7 +148,7 @@ async function fetchNewsRSS() {
 
 // ✅ Schedule the cron job to fetch NewsAPI articles every 30 minutes
 cron.schedule("*/30 * * * *", fetchNewsAPI);
-cron.schedule("*/30 * * * *", fetchNewsRSS)
+cron.schedule("*/30 * * * *", fetchNewsRSS);
 
 /* -----------------------------------------------------------------------------
     2. getDbNews()
@@ -169,6 +161,7 @@ export async function getDbNews() {
     const articles = await collection
       .find({})
       .sort({ publishedAt: -1 })
+      .limit(50)
       .toArray();
     return articles;
   } catch (error) {
@@ -198,3 +191,20 @@ export async function getRankedNews(req, res) {
     });
   }
 }
+
+/* -----------------------------------------------------------------------------
+    4. HOUSEKEEPING JOB
+    - Delete any news articles older than 3 days
+    - Schedule to run twice a day at midnight and midday
+ ----------------------------------------------------------------------------- */
+cron.schedule("0 0,12 * * *", async () => {
+  console.log("🔄 [CRON] Running housekeeping: Deleting articles older than 3 days...");
+  try {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 3);
+    const result = await collection.deleteMany({ publishedAt: { $lt: cutoff } });
+    console.log(`✅ Deleted ${result.deletedCount} articles older than 3 days.`);
+  } catch (error) {
+    console.error("❌ Error during housekeeping deletion:", error);
+  }
+});

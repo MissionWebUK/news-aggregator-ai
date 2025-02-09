@@ -8,10 +8,10 @@ export default function Home() {
   // Get session data (if any)
   const { data: session } = useSession();
 
-  // State for data and UI flags
-  const [latestNews, setLatestNews] = useState([]);
-  const [aiRankedNews, setAiRankedNews] = useState([]);
-  const [categoryCarousels, setCategoryCarousels] = useState([]);
+  // State for disjoint news arrays and UI flags
+  const [displayLatestNews, setDisplayLatestNews] = useState([]);
+  const [displayAiRankedNews, setDisplayAiRankedNews] = useState([]);
+  const [displayCategoryCarousels, setDisplayCategoryCarousels] = useState([]);
   const [prefCategories, setPrefCategories] = useState([]);
   const [aiRankingEnabled, setAiRankingEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -36,7 +36,7 @@ export default function Home() {
     return shuffled.slice(0, n);
   }
 
-  // Fetch latest news and user preferences on mount or when aiRankingEnabled/session changes.
+  // Fetch data and compute disjoint article arrays on mount or when aiRankingEnabled/session changes.
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
@@ -46,43 +46,64 @@ export default function Home() {
         // 1. Fetch Latest News (from /api/news)
         const resLatest = await axios.get("/api/news", { withCredentials: true });
         const latest = resLatest.data?.articles || [];
-        setLatestNews(latest);
 
-        // 2. Fetch AI Ranked News if user is authenticated and AI ranking is enabled.
-        // (Note: For this front-end view, authentication is not required. AI Ranked News is only shown if a session exists.)
+        // 2. Fetch AI Ranked News if applicable
+        let aiNews = [];
         if (session && aiRankingEnabled) {
           const resAi = await axios.get("/api/news-rank", { withCredentials: true });
-          const aiNews = resAi.data?.articles || [];
-          setAiRankedNews(aiNews);
-        } else {
-          setAiRankedNews([]);
+          aiNews = resAi.data?.articles || [];
         }
 
-        // 3. Determine which categories to display for category-specific carousels.
+        // 3. Determine user preference categories.
         let categories = [];
         if (session) {
-          // If user is signed in, fetch their preferences from /api/preferences.
           const resPref = await axios.get("/api/preferences", { withCredentials: true });
           categories = resPref.data?.categories || [];
         } else {
-          // Otherwise, pick 3 random default categories.
           categories = pickRandomCategories(defaultCategories, 3);
         }
         setPrefCategories(categories);
 
-        // 4. Build category carousels by filtering latestNews articles by category.
-        // Use article.categories (an array) and check if it contains the target category.
-        const carousels = categories.map((cat) => {
+        // 4. Create disjoint sets for display.
+        // We'll use a Set to track which article URLs have been used.
+        const usedURLs = new Set();
+
+        // Latest News Carousel: use the first 8 articles from latest.
+        const displayedLatest = latest.slice(0, 8);
+        displayedLatest.forEach(article => {
+          if (article.url) usedURLs.add(article.url);
+        });
+
+        // AI Ranked News Carousel: filter aiNews to remove duplicates.
+        let displayedAiNews = [];
+        if (session && aiRankingEnabled) {
+          displayedAiNews = aiNews.filter(article => article.url && !usedURLs.has(article.url)).slice(0, 8);
+          displayedAiNews.forEach(article => {
+            if (article.url) usedURLs.add(article.url);
+          });
+        }
+
+        // Category-Specific Carousels:
+        // For each category (from preferences or defaults), filter latest articles that match AND haven't been used.
+        const carousels = categories.map(cat => {
           const filtered = latest.filter(
             (article) =>
               article.categories &&
-              article.categories.some(
-                (c) => c.toLowerCase() === cat.toLowerCase()
-              )
+              article.categories.some(c => c.toLowerCase() === cat.toLowerCase()) &&
+              article.url &&
+              !usedURLs.has(article.url)
           );
-          return { category: cat, articles: filtered };
+          const displayedForCat = filtered.slice(0, 8);
+          displayedForCat.forEach(article => {
+            if (article.url) usedURLs.add(article.url);
+          });
+          return { category: cat, articles: displayedForCat };
         });
-        setCategoryCarousels(carousels);
+
+        // Update state with disjoint arrays.
+        setDisplayLatestNews(displayedLatest);
+        setDisplayAiRankedNews(displayedAiNews);
+        setDisplayCategoryCarousels(carousels);
       } catch (err) {
         console.error("Error fetching data:", err);
         setError("Error fetching news data.");
@@ -92,11 +113,8 @@ export default function Home() {
     fetchData();
   }, [aiRankingEnabled, session]);
 
-  // Toggle label for the AI Ranking switch.
-  const toggleLabel = aiRankingEnabled ? "AI Ranking: ON" : "AI Ranking: OFF";
-
   return (
-    // Outer container: prevents overall horizontal scrolling.
+    // Outer container: static sidebar and header with centered content.
     <div className="flex min-h-screen overflow-x-hidden">
       {/* Sidebar */}
       <aside className="w-64 bg-gray-800 text-white p-4 flex-shrink-0">
@@ -112,6 +130,24 @@ export default function Home() {
             <a href="/dashboard" className="hover:underline">Dashboard</a>
           </li>
         </ul>
+        {/* AI Ranking Toggle in Sidebar */}
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-gray-200">AI Ranking</h3>
+          <label htmlFor="aiToggle" className="flex items-center cursor-pointer mt-2">
+            <div className="relative">
+              <input
+                type="checkbox"
+                id="aiToggle"
+                className="sr-only"
+                checked={aiRankingEnabled}
+                onChange={() => setAiRankingEnabled(!aiRankingEnabled)}
+              />
+              <div className="w-10 h-4 bg-gray-400 rounded-full shadow-inner"></div>
+              <div className={`dot absolute w-6 h-6 bg-white rounded-full shadow -left-1 -top-1 transition transform ${aiRankingEnabled ? 'translate-x-6' : ''}`}></div>
+            </div>
+            <span className="ml-3 text-gray-200">{aiRankingEnabled ? 'On' : 'Off'}</span>
+          </label>
+        </div>
       </aside>
 
       {/* Main Content Area */}
@@ -123,39 +159,25 @@ export default function Home() {
 
         {/* Content Wrapper: fixed max width and centered */}
         <div className="max-w-screen-xl mx-auto p-4">
-          {/* Toggle Controls and Error */}
-          <div className="flex items-center justify-between mb-4">
-            <label className="flex items-center bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow">
-              <span className="mr-2">{toggleLabel}</span>
-              <input
-                type="checkbox"
-                className="ml-2"
-                checked={aiRankingEnabled}
-                onChange={() => setAiRankingEnabled(!aiRankingEnabled)}
-              />
-            </label>
-            {error && (
-              <div className="text-red-500">
-                <span>⚠️ {error}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Loading Indicator */}
+          {error && (
+            <div className="text-red-500">
+              <span>⚠️ {error}</span>
+            </div>
+          )}
           {loading ? (
             <p className="text-center text-gray-600 dark:text-gray-300">Loading...</p>
           ) : (
             <>
-              {/* Latest News Carousel (no images, fixed width) */}
-              <Carousel title="Latest News" articles={latestNews} hideImage />
+              {/* Latest News Carousel */}
+              <Carousel title="Latest News" articles={displayLatestNews} hideImage />
 
-              {/* AI Ranked News Carousel (shown only if session exists and AI ranking is enabled) */}
-              {session && aiRankingEnabled && (
-                <Carousel title="AI Ranked News" articles={aiRankedNews} />
+              {/* AI Ranked News Carousel (only if applicable) */}
+              {session && aiRankingEnabled && displayAiRankedNews.length > 0 && (
+                <Carousel title="AI Ranked News" articles={displayAiRankedNews} />
               )}
 
               {/* Category-Specific Carousels */}
-              {categoryCarousels.map((carousel) => (
+              {displayCategoryCarousels.map((carousel) => (
                 <Carousel
                   key={carousel.category}
                   title={carousel.category}
@@ -164,6 +186,17 @@ export default function Home() {
               ))}
             </>
           )}
+
+          {/* Basic Footer */}
+          <footer className="mt-8 border-t pt-4 text-center text-gray-600 dark:text-gray-300">
+            <p>© 2025 News Aggregator AI. All rights reserved.</p>
+            <div className="mt-2 space-x-4">
+              <a href="/about" className="hover:underline">About Us</a>
+              <a href="/privacy" className="hover:underline">Privacy</a>
+              <a href="/terms" className="hover:underline">Terms & Conditions</a>
+              <a href="/contact" className="hover:underline">Contact</a>
+            </div>
+          </footer>
         </div>
       </div>
     </div>
@@ -171,17 +204,14 @@ export default function Home() {
 }
 
 // Carousel Component: Displays a horizontal scrolling list of news cards.
-// Each carousel container is self-contained and scrolls horizontally.
 function Carousel({ title, articles, hideImage = false }) {
-  // Limit to up to 8 articles.
-  const displayedArticles = articles ? articles.slice(0, 8) : [];
   return (
     <div className="mb-8">
       <h2 className="text-xl font-bold mb-4">{title}</h2>
       {/* Carousel wrapper with horizontal padding */}
       <div className="flex flex-nowrap space-x-4 overflow-x-auto pb-2 pl-4 pr-20 pt-2">
-        {displayedArticles.length > 0 ? (
-          displayedArticles.map((article, index) => (
+        {articles && articles.length > 0 ? (
+          articles.map((article, index) => (
             <NewsCard key={index} article={article} hideImage={hideImage} />
           ))
         ) : (
@@ -194,12 +224,13 @@ function Carousel({ title, articles, hideImage = false }) {
 
 // NewsCard Component: Displays a single news article as a card.
 // A default fallback image is used if article.urlToImage is missing.
-// The article's categories (if any) are displayed under the source.
+// The card content is laid out in a flex column so that the "Read More" link is always aligned at the bottom.
+// Also displays up to 2 categories.
 function NewsCard({ article, hideImage = false }) {
   const defaultImage = "/img/No_Image_Available.jpg";
 
   return (
-    <div className="w-64 bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden transition transform hover:scale-105 flex-shrink-0">
+    <div className="w-64 bg-white dark:bg-gray-800 shadow-md rounded-lg overflow-hidden transition transform hover:scale-105 flex flex-col flex-shrink-0">
       {!hideImage && (
         <div className="relative w-full h-40">
           <Image
@@ -211,7 +242,7 @@ function NewsCard({ article, hideImage = false }) {
           />
         </div>
       )}
-      <div className="p-4">
+      <div className="p-4 flex flex-col flex-grow">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
           {article.title}
         </h3>
@@ -223,7 +254,7 @@ function NewsCard({ article, hideImage = false }) {
         </p>
         {article.categories && article.categories.length > 0 && (
           <p className="text-indigo-600 dark:text-indigo-400 text-sm mt-1">
-            {article.categories.join(", ")}
+            {article.categories.slice(0, 2).join(", ")}
           </p>
         )}
         <p className="mt-2 text-gray-700 dark:text-gray-300 text-sm line-clamp-3">
@@ -233,7 +264,7 @@ function NewsCard({ article, hideImage = false }) {
           href={article.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block mt-2 text-blue-600 hover:underline text-sm"
+          className="mt-auto inline-block text-blue-600 hover:underline text-sm"
         >
           Read More →
         </a>

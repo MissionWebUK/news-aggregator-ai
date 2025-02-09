@@ -1,28 +1,43 @@
 // File: frontend/pages/preferences.js
-
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useDarkMode } from "../context/DarkModeContext";
 import axios from "axios";
+import Navbar from "../components/Navbar"; // Using the shared Navbar component
 
 export default function Preferences() {
-  // Always call hooks at the top
+  // Global dark mode and session hooks
   const { darkMode } = useDarkMode();
   const { data: session, status } = useSession();
 
-  // Declare state hooks unconditionally
+  // Local state for preferences form
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [keywords, setKeywords] = useState([]);
   const [inputValue, setInputValue] = useState("");
   const [message, setMessage] = useState("");
-  const [autoSaving, setAutoSaving] = useState(false);
 
-  // Fetch preferences from DB and localStorage on mount
+  // State for controlling the mobile sidebar toggle
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // List of available categories
+  const categoriesList = [
+    "Technology",
+    "Business",
+    "Sports",
+    "Entertainment",
+    "Health",
+    "Science",
+    "Politics",
+    "Finance",
+    "Gaming",
+  ];
+
+  // Fetch preferences from DB and localStorage on mount (or when the session ID changes)
   useEffect(() => {
     const fetchPreferences = async () => {
       if (session?.user?.id) {
         try {
-          // Include withCredentials so cookies are sent along
+          // Include credentials so that the session cookie is sent
           const { data: dbPrefs } = await axios.get("/api/preferences", {
             withCredentials: true,
           });
@@ -37,14 +52,14 @@ export default function Preferences() {
             const localDate = new Date(localPrefs.updatedAt);
             const dbDate = new Date(dbPrefs.updatedAt);
             if (localDate > dbDate) {
-              // Local preferences are more recent – use them and update the DB.
+              // Use localPrefs if they're more recent, and update the backend
               setSelectedCategories(localPrefs.categories);
               setKeywords(localPrefs.keywords);
               await axios.post("/api/preferences", localPrefs, {
                 withCredentials: true,
               });
             } else {
-              // DB preferences are more recent – use them and update localStorage.
+              // Use backend preferences and update localStorage
               setSelectedCategories(dbPrefs.categories);
               setKeywords(dbPrefs.keywords);
               localStorage.setItem("preferences", JSON.stringify(dbPrefs));
@@ -66,7 +81,7 @@ export default function Preferences() {
     fetchPreferences();
   }, [session?.user?.id]);
 
-  // Auto-save preferences to localStorage and DB (debounced)
+  // Auto-save preferences (debounced) to localStorage and backend
   useEffect(() => {
     const timer = setTimeout(async () => {
       const newPrefs = {
@@ -115,52 +130,69 @@ export default function Preferences() {
     setKeywords(keywords.filter((k) => k !== tag));
   };
 
-  const categoriesList = [
-    "Technology",
-    "Business",
-    "Sports",
-    "Entertainment",
-    "Health",
-    "Science",
-    "Politics",
-    "Finance",
-    "Gaming",
-  ];
-
   return (
-    // Outer layout: static sidebar and header with main content centered in a fixed-width container.
+    // Outer container: static sidebar and main content.
     <div className="flex min-h-screen overflow-x-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-gray-800 text-white p-4 flex-shrink-0">
-        <h2 className="text-xl font-bold mb-4">Menu</h2>
-        <ul>
-          <li className="mb-2">
-            <a href="/" className="hover:underline">Home</a>
-          </li>
-          <li className="mb-2">
-            <a href="/preferences" className="hover:underline">Preferences</a>
-          </li>
-          <li className="mb-2">
-            <a href="/dashboard" className="hover:underline">Dashboard</a>
-          </li>
-        </ul>
-      </aside>
+      {/* Sidebar: fixed on mobile with top offset so it starts below the hamburger icon */}
+      <div className="bg-gray-800">
+        <aside
+          className={`fixed top-16 bottom-0 left-0 z-30 w-64 bg-gray-800 text-white p-4 transform transition-transform duration-300 ease-in-out ${
+            sidebarOpen ? "translate-x-0" : "-translate-x-full"
+          } md:relative md:translate-x-0`}
+        >
+          <h2 className="text-xl font-bold mb-4">Menu</h2>
+          <ul>
+            <li className="mb-2">
+              <a href="/" className="hover:underline">
+                Home
+              </a>
+            </li>
+            <li className="mb-2">
+              <a href="/preferences" className="hover:underline">
+                Preferences
+              </a>
+            </li>
+            <li className="mb-2">
+              <a href="/dashboard" className="hover:underline">
+                Dashboard
+              </a>
+            </li>
+          </ul>
+        </aside>
+        {/* Hamburger Button: visible only on small screens */}
+        <div className="md:hidden fixed top-4 left-4 z-40">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 text-gray-800 bg-white rounded-md shadow"
+          >
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </div>
 
       {/* Main Content Area */}
       <div className="flex-1">
-        {/* Header */}
-        <header className="bg-blue-900 text-white p-4">
-          <h1 className="text-2xl font-bold">Preferences</h1>
-        </header>
-
-        {/* Content Container */}
-        <div className="max-w-screen-xl mx-auto p-4">
+        {/* Content Wrapper: centered container with fixed max width and dark blue background in dark mode */}
+        <div className="max-w-screen-xl mx-auto p-4 dark:bg-blue-900">
           {status === "loading" ? (
             <p>Loading...</p>
           ) : (
             <>
-              {/* Preferences Content */}
-              <h1 className="text-2xl font-bold">Preferences</h1>
+              {/* Page Title */}
+              <h1 className="text-2xl font-bold mb-4">Preferences</h1>
 
               {/* News Categories Selection */}
               <div className="mt-6">
@@ -183,7 +215,7 @@ export default function Preferences() {
                 </div>
               </div>
 
-              {/* Custom Keywords */}
+              {/* Custom Keywords Section */}
               <div className="mt-6">
                 <h2 className="text-lg font-medium">Custom Keywords</h2>
                 <div className="flex items-center mt-3 space-x-2">
@@ -201,7 +233,6 @@ export default function Preferences() {
                     Add
                   </button>
                 </div>
-
                 {/* Display Added Keywords */}
                 <div className="mt-4 flex flex-wrap gap-2">
                   {keywords.map((keyword) => (
@@ -224,6 +255,25 @@ export default function Preferences() {
               {message && <p className="mt-4 text-green-600">{message}</p>}
             </>
           )}
+
+          {/* Basic Footer */}
+          <footer className="mt-8 border-t pt-4 text-center text-gray-600 dark:text-gray-300">
+            <p>© 2025 News Aggregator AI. All rights reserved.</p>
+            <div className="mt-2 space-x-4">
+              <a href="/about" className="hover:underline">
+                About Us
+              </a>
+              <a href="/privacy" className="hover:underline">
+                Privacy
+              </a>
+              <a href="/terms" className="hover:underline">
+                Terms & Conditions
+              </a>
+              <a href="/contact" className="hover:underline">
+                Contact
+              </a>
+            </div>
+          </footer>
         </div>
       </div>
     </div>

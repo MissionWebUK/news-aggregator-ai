@@ -1,14 +1,15 @@
+// File: frontend/components/Navbar.js
 import { useState, useEffect, useRef } from "react";
 import { signOut, useSession } from "next-auth/react";
-import { useDarkMode } from "../context/DarkModeContext"; // ✅ Import Dark Mode Hook
+import { useDarkMode } from "../context/DarkModeContext";
 import Link from "next/link";
 
-export default function Navbar() {
+export default function Navbar({ toggleSidebar }) {
   const { data: session } = useSession();
   const { darkMode, setDarkMode } = useDarkMode();
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [mounted, setMounted] = useState(false); // ✅ Fix hydration issue
-  const dropdownRef = useRef(null); // ✅ Ref for outside click detection
+  const [mounted, setMounted] = useState(false);
+  const dropdownRef = useRef(null);
 
   // Ensure dark mode is applied after hydration
   useEffect(() => {
@@ -22,19 +23,35 @@ export default function Navbar() {
         setDropdownOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   return (
-    <nav className="bg-white dark:bg-gray-900 shadow-md py-3 px-6 flex justify-between items-center">
+    <nav className="bg-white dark:bg-gray-900 shadow-md py-3 px-6 flex items-center">
+      {/* Hamburger button: visible on small screens only */}
+      <button
+        onClick={toggleSidebar}
+        className="md:hidden mr-3 p-2 rounded-md focus:outline-none focus:ring"
+      >
+        <svg
+          className="w-6 h-6 text-gray-900 dark:text-white"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path>
+        </svg>
+      </button>
+
+      {/* Title: positioned to the right of the hamburger */}
       <Link href="/">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white cursor-pointer">News Aggregator</h1>
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white">News Aggregator</h1>
       </Link>
 
-      <div className="flex items-center space-x-4">
-        {/* Dark Mode Toggle (Avoid SSR Mismatch) */}
+      <div className="ml-auto flex items-center space-x-4">
+        {/* Dark Mode Toggle */}
         {mounted && (
           <button
             onClick={() => setDarkMode(!darkMode)}

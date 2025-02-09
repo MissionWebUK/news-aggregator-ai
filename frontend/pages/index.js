@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
+import Navbar from "../components/Navbar"; // Import the existing Navbar component
 
 export default function Home() {
   // Get session data (if any)
@@ -16,6 +17,9 @@ export default function Home() {
   const [aiRankingEnabled, setAiRankingEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // State for sidebar toggle on mobile
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Helper: default categories for non-authenticated users
   const defaultCategories = [
@@ -114,51 +118,64 @@ export default function Home() {
   }, [aiRankingEnabled, session]);
 
   return (
-    // Outer container: static sidebar and header with centered content.
+    // Outer container: static sidebar and main content.
     <div className="flex min-h-screen overflow-x-hidden">
-      {/* Sidebar */}
-      <aside className="w-64 bg-gray-800 text-white p-4 flex-shrink-0">
-        <h2 className="text-xl font-bold mb-4">Menu</h2>
-        <ul>
-          <li className="mb-2">
-            <a href="/" className="hover:underline">Home</a>
-          </li>
-          <li className="mb-2">
-            <a href="/preferences" className="hover:underline">Preferences</a>
-          </li>
-          <li className="mb-2">
-            <a href="/dashboard" className="hover:underline">Dashboard</a>
-          </li>
-        </ul>
-        {/* AI Ranking Toggle in Sidebar */}
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold text-gray-200">AI Ranking</h3>
-          <label htmlFor="aiToggle" className="flex items-center cursor-pointer mt-2">
-            <div className="relative">
-              <input
-                type="checkbox"
-                id="aiToggle"
-                className="sr-only"
-                checked={aiRankingEnabled}
-                onChange={() => setAiRankingEnabled(!aiRankingEnabled)}
-              />
-              <div className="w-10 h-4 bg-gray-400 rounded-full shadow-inner"></div>
-              <div className={`dot absolute w-6 h-6 bg-white rounded-full shadow -left-1 -top-1 transition transform ${aiRankingEnabled ? 'translate-x-6' : ''}`}></div>
-            </div>
-            <span className="ml-3 text-gray-200">{aiRankingEnabled ? 'On' : 'Off'}</span>
-          </label>
+      {/* Sidebar for md and above is always visible.
+          For smaller screens, use an overlay if sidebarOpen is true.
+          Note the change: instead of "inset-y-0", we now use "top-16 bottom-0" so the sidebar starts below the hamburger icon */}
+      <div className="bg-gray-800">
+        <aside className={`fixed top-16 bottom-0 left-0 z-30 w-64 bg-gray-800 text-white p-4 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:relative md:translate-x-0`}>
+          <h2 className="text-xl font-bold mb-4">Menu</h2>
+          <ul>
+            <li className="mb-2">
+              <a href="/" className="hover:underline">Home</a>
+            </li>
+            <li className="mb-2">
+              <a href="/preferences" className="hover:underline">Preferences</a>
+            </li>
+            <li className="mb-2">
+              <a href="/dashboard" className="hover:underline">Dashboard</a>
+            </li>
+          </ul>
+          {/* AI Ranking Toggle in Sidebar */}
+          <div className="mt-6">
+            <h3 className="text-sm font-semibold text-gray-200">AI Ranking</h3>
+            <label htmlFor="aiToggle" className="flex items-center cursor-pointer mt-2">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  id="aiToggle"
+                  className="sr-only"
+                  checked={aiRankingEnabled}
+                  onChange={() => setAiRankingEnabled(!aiRankingEnabled)}
+                />
+                <div className="w-10 h-4 bg-gray-300 rounded-full shadow-inner"></div>
+                <div className={`dot absolute w-6 h-6 bg-white rounded-full shadow -left-1 -top-1 transition transform ${aiRankingEnabled ? 'translate-x-6' : ''}`}></div>
+              </div>
+              <span className="ml-3 text-gray-200">{aiRankingEnabled ? 'On' : 'Off'}</span>
+            </label>
+          </div>
+        </aside>
+        {/* Hamburger Button: visible only on small screens */}
+        <div className="md:hidden fixed top-4 left-4 z-40">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 text-gray-800 bg-white rounded-md shadow">
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+          </button>
         </div>
-      </aside>
+      </div>
 
       {/* Main Content Area */}
       <div className="flex-1">
-        {/* Header */}
-        <header className="bg-blue-900 text-white p-4">
-          <h1 className="text-2xl font-bold">News Aggregator AI</h1>
-        </header>
-
-        {/* Content Wrapper: fixed max width and centered */}
-        <div className="max-w-screen-xl mx-auto p-4">
+        {/* Content Wrapper: fixed max width, centered, with dark mode background */}
+        <div className="max-w-screen-xl mx-auto p-4 dark:bg-blue-900">
           {error && (
             <div className="text-red-500">
               <span>⚠️ {error}</span>
@@ -208,8 +225,8 @@ function Carousel({ title, articles, hideImage = false }) {
   return (
     <div className="mb-8">
       <h2 className="text-xl font-bold mb-4">{title}</h2>
-      {/* Carousel wrapper with horizontal padding */}
-      <div className="flex flex-nowrap space-x-4 overflow-x-auto pb-2 pl-4 pr-20 pt-2">
+      {/* Carousel wrapper with horizontal padding. Responsive right padding for small screens */}
+      <div className="flex flex-nowrap space-x-4 overflow-x-auto pb-2 pl-4 pr-4 md:pr-20 pt-2">
         {articles && articles.length > 0 ? (
           articles.map((article, index) => (
             <NewsCard key={index} article={article} hideImage={hideImage} />

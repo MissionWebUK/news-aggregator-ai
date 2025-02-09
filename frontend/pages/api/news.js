@@ -35,7 +35,7 @@ export default async function handler(req, res) {
         },
       },
       orderBy: { publishedAt: "desc" }, // Ensure most recent articles first
-      take: 50,
+      //take: 50,
     });
 
     console.log(`🔍 [news.js] Returning ${articles.length} articles to client.`);

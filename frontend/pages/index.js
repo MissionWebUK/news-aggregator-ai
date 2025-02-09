@@ -36,7 +36,7 @@ export default function Home() {
     return shuffled.slice(0, n);
   }
 
-  // Fetch latest news, AI ranked news, and user preferences on mount or when aiRankingEnabled/session changes
+  // Fetch latest news and user preferences on mount or when aiRankingEnabled/session changes.
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
@@ -48,7 +48,8 @@ export default function Home() {
         const latest = resLatest.data?.articles || [];
         setLatestNews(latest);
 
-        // 2. Fetch AI Ranked News if user is authenticated and AI ranking is enabled
+        // 2. Fetch AI Ranked News if user is authenticated and AI ranking is enabled.
+        // (Note: For this front-end view, authentication is not required. AI Ranked News is only shown if a session exists.)
         if (session && aiRankingEnabled) {
           const resAi = await axios.get("/api/news-rank", { withCredentials: true });
           const aiNews = resAi.data?.articles || [];
@@ -57,25 +58,27 @@ export default function Home() {
           setAiRankedNews([]);
         }
 
-        // 3. Determine which categories to display for category-specific carousels:
+        // 3. Determine which categories to display for category-specific carousels.
         let categories = [];
         if (session) {
-          // If user is signed in, fetch their preferences from /api/preferences
+          // If user is signed in, fetch their preferences from /api/preferences.
           const resPref = await axios.get("/api/preferences", { withCredentials: true });
           categories = resPref.data?.categories || [];
         } else {
-          // Otherwise, pick 3 random default categories
+          // Otherwise, pick 3 random default categories.
           categories = pickRandomCategories(defaultCategories, 3);
         }
         setPrefCategories(categories);
 
         // 4. Build category carousels by filtering latestNews articles by category.
-        // (Assumes each article has a "category" string)
+        // Use article.categories (an array) and check if it contains the target category.
         const carousels = categories.map((cat) => {
           const filtered = latest.filter(
             (article) =>
-              article.category &&
-              article.category.toLowerCase() === cat.toLowerCase()
+              article.categories &&
+              article.categories.some(
+                (c) => c.toLowerCase() === cat.toLowerCase()
+              )
           );
           return { category: cat, articles: filtered };
         });
@@ -89,11 +92,11 @@ export default function Home() {
     fetchData();
   }, [aiRankingEnabled, session]);
 
-  // Toggle label for the AI Ranking switch
+  // Toggle label for the AI Ranking switch.
   const toggleLabel = aiRankingEnabled ? "AI Ranking: ON" : "AI Ranking: OFF";
 
   return (
-    // Outer container: use overflow-x-hidden to ensure the page never scrolls horizontally.
+    // Outer container: prevents overall horizontal scrolling.
     <div className="flex min-h-screen overflow-x-hidden">
       {/* Sidebar */}
       <aside className="w-64 bg-gray-800 text-white p-4 flex-shrink-0">
@@ -146,7 +149,7 @@ export default function Home() {
               {/* Latest News Carousel (no images, fixed width) */}
               <Carousel title="Latest News" articles={latestNews} hideImage />
 
-              {/* AI Ranked News Carousel (only for authenticated users) */}
+              {/* AI Ranked News Carousel (shown only if session exists and AI ranking is enabled) */}
               {session && aiRankingEnabled && (
                 <Carousel title="AI Ranked News" articles={aiRankedNews} />
               )}
@@ -175,8 +178,8 @@ function Carousel({ title, articles, hideImage = false }) {
   return (
     <div className="mb-8">
       <h2 className="text-xl font-bold mb-4">{title}</h2>
-      {/* Carousel wrapper: left padding is px-4, right padding increased to pr-20, and top padding is pt-2 */}
-      <div className="flex flex-nowrap space-x-4 overflow-x-auto pb-2 pl-4 pr-20 pt-2 pb-6">
+      {/* Carousel wrapper with horizontal padding */}
+      <div className="flex flex-nowrap space-x-4 overflow-x-auto pb-2 pl-4 pr-20 pt-2">
         {displayedArticles.length > 0 ? (
           displayedArticles.map((article, index) => (
             <NewsCard key={index} article={article} hideImage={hideImage} />
@@ -190,8 +193,9 @@ function Carousel({ title, articles, hideImage = false }) {
 }
 
 // NewsCard Component: Displays a single news article as a card.
+// A default fallback image is used if article.urlToImage is missing.
+// The article's categories (if any) are displayed under the source.
 function NewsCard({ article, hideImage = false }) {
-  // Define a default placeholder image URL (make sure this image is in your public folder)
   const defaultImage = "/img/No_Image_Available.jpg";
 
   return (
@@ -213,8 +217,15 @@ function NewsCard({ article, hideImage = false }) {
         </h3>
         <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
           {article.source} •{" "}
-          {article.publishedAt ? new Date(article.publishedAt).toLocaleDateString() : ""}
+          {article.publishedAt
+            ? new Date(article.publishedAt).toLocaleDateString()
+            : ""}
         </p>
+        {article.categories && article.categories.length > 0 && (
+          <p className="text-indigo-600 dark:text-indigo-400 text-sm mt-1">
+            {article.categories.join(", ")}
+          </p>
+        )}
         <p className="mt-2 text-gray-700 dark:text-gray-300 text-sm line-clamp-3">
           {article.summary}
         </p>

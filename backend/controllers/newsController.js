@@ -169,7 +169,6 @@ export async function getDbNews() {
     const articles = await collection
       .find({})
       .sort({ publishedAt: -1 })
-      .limit(50)
       .toArray();
     return articles;
   } catch (error) {

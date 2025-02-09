@@ -64,15 +64,15 @@ model VerificationToken {
 model NewsArticle {
   id          String   @id @map("_id") @default(auto()) @db.ObjectId
   title       String
-  url         String   @unique  // ✅ Ensure URL is unique
+  url         String   @unique  // Ensure URL is unique
   source      String
   publishedAt DateTime
   content     String?
   keywords    String[]
-  category    String?
+  categories  String[] // Changed from a single String to an array
   relevance   Float?
-  urlToImage  String?  // ✅ Add field for article images
-  summary     String?  // ✅ Add field for AI-generated summaries
+  urlToImage  String?  // Field for article images
+  summary     String?  // Field for AI-generated summaries
 }
 
 model UserRecommendation {

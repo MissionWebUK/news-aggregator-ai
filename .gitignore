@@ -18,3 +18,7 @@ frontend/.env.local
 # Build Files
 .next/
 dist/
+
+# Mac Files
+
+.DS_Store
